@@ -30,15 +30,24 @@ def _blend(img: np.ndarray, color: np.ndarray, mask: np.ndarray) -> None:
     img += color * a
 
 
-def _rounded_square(size: int, radius: int) -> np.ndarray:
+def _rounded_square(size: int, radius: float) -> np.ndarray:
+    """Альфа-маска скруглённого прямоугольника со сглаженным краем.
+
+    Считаем по центрам пикселей: пиксель i занимает [i-0.5, i+0.5], поэтому
+    фигура должна доходить до -0.5 и size-0.5. Раньше граница проходила по
+    0 и size-1, и на прямых краях альфа была 128 — край выглядел полупрозрачным.
+    """
     y, x = np.mgrid[0:size, 0:size].astype(np.float64)
-    # расстояние до «скруглённого» прямоугольника
-    dx = np.maximum(radius - x, x - (size - 1 - radius))
-    dy = np.maximum(radius - y, y - (size - 1 - radius))
+    lo = radius - 0.5
+    hi = (size - 0.5) - radius
+    dx = np.maximum(lo - x, x - hi)
+    dy = np.maximum(lo - y, y - hi)
     dx = np.maximum(dx, 0.0)
     dy = np.maximum(dy, 0.0)
-    dist = np.sqrt(dx * dx + dy * dy) - radius
-    return np.clip(0.5 - dist, 0.0, 1.0)  # мягкий край
+    # стандартный SDF скруглённого прямоугольника
+    outside = np.sqrt(dx * dx + dy * dy) - radius
+    dist = np.minimum(np.maximum(dx, dy), 0.0) + outside
+    return np.clip(0.5 - dist, 0.0, 1.0)  # мягкий край в 1 пиксель
 
 
 def _ring(size: int, cx: float, cy: float, radius: float, width: float) -> np.ndarray:
@@ -100,8 +109,9 @@ def render(size: int) -> np.ndarray:
     y = np.linspace(0.0, 1.0, size)[:, None, None]
     img += BG_TOP * (1 - y) + BG_BOTTOM * y
 
-    # скруглённый квадрат — маска всей иконки
-    sq = _rounded_square(size, size * 0.22)
+    # Скруглённый квадрат: маска формы иконки. Идёт в альфа-канал,
+    # поэтому углы прозрачные, а не чёрные.
+    sq = _rounded_square(size, size * 0.235)
 
     cx = cy = size / 2.0
     R = size * 0.32
@@ -121,19 +131,27 @@ def render(size: int) -> np.ndarray:
         _needle(size, cx, cy, 225.0 + 270.0 * 0.62, R * 0.62, max(1.0, size * 0.019)) * sq,
     )
 
-    img *= sq[..., None]
-    return np.clip(img, 0, 255).astype(np.uint8)
+    rgb = np.clip(img, 0, 255).astype(np.uint8)
+    alpha = np.clip(sq * 255.0 + 0.5, 0, 255).astype(np.uint8)
+    return np.dstack([rgb, alpha])
 
 
-def write_png(path: Path, rgb: np.ndarray) -> None:
-    h, w, _ = rgb.shape
-    raw = b"".join(b"\x00" + rgb[i].tobytes() for i in range(h))
+def write_png(path: Path, rgba: np.ndarray) -> None:
+    """Пишет PNG с альфа-каналом (тип 6).
+
+    С типом 2 (RGB, как было раньше) прозрачность терялась: скруглённые
+    углы заливались чёрным, и иконка выглядела тёмным квадратом.
+    """
+    h, w, ch = rgba.shape
+    if ch != 4:
+        raise ValueError(f"ожидался RGBA, получено {ch} каналов")
+    raw = b"".join(b"\x00" + rgba[i].tobytes() for i in range(h))
 
     def chunk(tag: bytes, data: bytes) -> bytes:
         return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
 
     png = b"\x89PNG\r\n\x1a\n"
-    png += chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+    png += chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0))
     png += chunk(b"IDAT", zlib.compress(raw, 9))
     png += chunk(b"IEND", b"")
     path.write_bytes(png)
