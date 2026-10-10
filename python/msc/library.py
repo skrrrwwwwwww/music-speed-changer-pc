@@ -239,6 +239,102 @@ def _walk(root: Path, limit_per_dir: int = 4000) -> Iterable[Path]:
                     break
 
 
+def duration_of(path: str) -> Optional[float]:
+    """Длительность трека в секундах или None, если не определилась.
+
+    ffprobe стоит около 40 мс на файл, поэтому длительности не читаются при
+    сканировании — их досчитывает отдельный проход в фоне (см. DurationWorker).
+    """
+    try:
+        meta = metadata(path)
+    except Exception:  # noqa: BLE001
+        return None
+    d = meta.get("duration")
+    try:
+        d = float(d)
+    except (TypeError, ValueError):
+        return None
+    return d if d > 0 else None
+
+
+class DurationWorker:
+    """Досчитывает длительности в фоне, порциями, с кэшем на диске.
+
+    Кэш ключуется по (размер, mtime), поэтому повторные запуски почти мгновенны,
+    а изменённые файлы пересчитываются сами.
+    """
+
+    def __init__(self, on_batch: Callable[[dict, bool], None]) -> None:
+        self.on_batch = on_batch
+        self._thread: Optional[threading.Thread] = None
+        self._lock = threading.Lock()
+
+    @property
+    def running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def start(self, tracks: list[dict], cache: Optional[dict] = None) -> bool:
+        with self._lock:
+            if self.running:
+                return False
+            self._thread = threading.Thread(
+                target=self._run, args=(tracks, cache or {}), daemon=True, name="msc-dur"
+            )
+            self._thread.start()
+            return True
+
+    def _run(self, tracks: list[dict], cache: dict) -> None:
+        found: dict[str, float] = {}
+        stale = 0
+        pending: list[dict] = []
+        for t in tracks:
+            key = t.get("path", "")
+            hit = cache.get(key)
+            if isinstance(hit, (list, tuple)) and len(hit) == 3:
+                dur, size, mtime = hit
+                if size == t.get("size") and abs(float(mtime) - float(t.get("mtime", 0))) < 1:
+                    found[key] = float(dur)
+                    continue
+            pending.append(t)
+
+        # Сначала отдаём то, что уже было в кэше: список отрисуется сразу.
+        if found:
+            self.on_batch(found, False)
+        for t in pending:
+            d = duration_of(t.get("path", ""))
+            if d is None:
+                continue
+            found[t["path"]] = d
+            stale += 1
+            # Отдаём порциями, чтобы список наполнялся по ходу дела.
+            if stale % 25 == 0:
+                self.on_batch(found, False)
+        if found:
+            self.on_batch(found, True)
+
+
+def load_duration_cache() -> dict:
+    data = load_cache()
+    cache = data.get("durations")
+    return cache if isinstance(cache, dict) else {}
+
+
+def save_duration_cache(tracks: list[dict], durations: dict) -> None:
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        payload = {}
+        by_path = {t.get("path"): t for t in tracks}
+        for path, dur in durations.items():
+            t = by_path.get(path)
+            if t is not None:
+                payload[path] = [round(float(dur), 3), t.get("size"), t.get("mtime")]
+        data = load_cache()
+        data["durations"] = payload
+        CACHE_FILE.write_text(json.dumps(data, ensure_ascii=False), "utf-8")
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def scan(roots: Optional[list[Path]] = None) -> list[dict]:
     """Список треков: путь, имя, папка, размер. Сортировка «человеческая»."""
     roots = roots if roots is not None else user_roots()
@@ -351,6 +447,7 @@ class LibraryWorker:
             "scanned": [str(r) for r in roots],
             "skipped": [r for r in known_roots() if not r["enabled"] and r["exists"]],
             "home": str(Path.home()),
+            "duration_cache": load_duration_cache(),
         }
 
     def _run(self, force: bool, roots: Optional[list[Path]]) -> None:

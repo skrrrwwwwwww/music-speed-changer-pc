@@ -625,11 +625,30 @@ function onEngineEvent(ev) {
       library.roots = ev.roots || [];
       library.home = ev.home || library.home || '';
       library.scanning = false;
+      // Длительности из кэша показываем сразу, не дожидаясь фонового прохода.
+      if (ev.duration_cache) {
+        const fromCache = {};
+        for (const [p, v] of Object.entries(ev.duration_cache)) {
+          if (Array.isArray(v) && v.length === 3) fromCache[p] = v[0];
+        }
+        if (Object.keys(fromCache).length) library.durations = { ...fromCache, ...library.durations };
+      }
       if (library.open) renderLibrary();
       else if (library.tracks.length) {
         el['btn-lib'].textContent = `Библиотека (${library.tracks.length})`;
       }
       break;
+    case 'libraryDurations': {
+      // Фоновая досчитка длительностей: обновляем список на ходу.
+      library.durations = { ...(ev.durations || {}), ...library.durations };
+      if (library.open) renderLibrary();
+      if (ev.done) {
+        el['lib-status'].textContent = library.tracks.length
+          ? `Найдено: ${library.tracks.length} в ${new Set(library.tracks.map((t) => t.dir)).size} папках`
+          : '';
+      }
+      break;
+    }
     case 'exportStarted':
       el['export-overlay'].classList.remove('hidden');
       el['export-bar'].style.width = '0%';
@@ -705,6 +724,7 @@ const library = {
   scanning: false,
   collapsed: new Set(), // папки, свёрнутые пользователем
   home: '', // домашний каталог — приходит из движка, нужен для «~/…»
+  durations: {}, // path -> длительность в секундах (считает фон)
 };
 
 const NUM_RE = /(\d+)/g;
@@ -797,7 +817,12 @@ function trackRow(t) {
 
   const meta = document.createElement('div');
   meta.className = 'd';
-  meta.textContent = t.ext ? t.ext.toUpperCase() : '';
+  // Длительность приходит фоновым проходом и может появиться позже списка.
+  const dur = library.durations[t.path];
+  const bits = [];
+  if (dur) bits.push(fmtTime(dur));
+  if (t.ext) bits.push(t.ext.toUpperCase());
+  meta.textContent = bits.join(' · ');
 
   row.append(title, meta);
   row.addEventListener('click', () => loadFile(t.path));

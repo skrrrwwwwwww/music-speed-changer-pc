@@ -84,6 +84,7 @@ class Engine:
         self._heard: Optional[tuple] = None  # (src_pos, rate)
         self._heard_at = 0.0
         self._underruns = 0
+        self._priming = False  # идёт намеренное наполнение очереди (play/seek)
         self._ended = threading.Event()
 
         self.speed = 1.0
@@ -247,19 +248,31 @@ class Engine:
                 self._seek_locked(self._pos_override)
                 self._pos_override = None
             self._paused = False
+            # Сначала наполняем очередь, и только потом включаем воспроизведение.
+            # Раньше было наоборот: _playing=True, затем prime(). Аудиоколбэк за
+            # это окно (доли миллисекунды на первый блок) успевал увидеть пустую
+            # очередь при «играющем» состоянии — отсюда щелчки на старте.
+            self._prime_locked()
             self._playing = True
             self._ended.clear()
-            self._prime_locked()
         self._wake.set()
 
     def _prime_locked(self) -> None:
-        """Предзаполняет очередь, чтобы не было щелчка тишины на старте."""
-        while len(self._queue) < QUEUE_BLOCKS and self._stream is not None:
-            blocks = self._render_blocks(BLOCK)
-            if not blocks:
-                break
-            for block in blocks:
-                self._queue.append(block)
+        """Предзаполняет очередь, чтобы не было щелчка тишины на старте.
+
+        Пока идёт намеренное наполнение (после play/seek/повтора), пустая
+        очередь — это не срыв аудиопотока, и счётчик underruns её не трогает.
+        """
+        self._priming = True
+        try:
+            while len(self._queue) < QUEUE_BLOCKS and self._stream is not None:
+                blocks = self._render_blocks(BLOCK)
+                if not blocks:
+                    break
+                for block in blocks:
+                    self._queue.append(block)
+        finally:
+            self._priming = False
 
     def pause(self) -> None:
         with self.lock:
@@ -491,7 +504,9 @@ class Engine:
             if not self._queue:
                 if filled < frames:
                     outdata[filled:] = 0.0
-                    if self._playing:
+                    # Считаем только настоящий срыв: намеренное наполнение
+                    # очереди после play/seek — не underrun.
+                    if self._playing and not self._priming:
                         self._underruns += 1
                 self._heard = None
                 # Будим рендерер: иначе он спит до конца таймаута и будет тишина.

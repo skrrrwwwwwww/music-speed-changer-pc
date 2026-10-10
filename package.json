@@ -1,7 +1,7 @@
 {
   "name": "music-speed-changer",
   "productName": "Music Speed Changer",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Настольный аналог Android-приложения Music Speed Changer: темп и тон аудио в реальном времени (Python DSP + Electron UI)",
   "main": "electron/main.js",
   "private": true,
@@ -12,6 +12,7 @@
     "selftest": ".venv/bin/python python/selftest.py",
     "e2e": "node scripts/e2e.mjs",
     "test": "npm run selftest && npm run e2e",
+    "soak": "node scripts/soak.mjs",
     "setup:py": "python3 -m venv .venv && .venv/bin/python -m pip install -r python/requirements.txt",
     "icon": ".venv/bin/python scripts/make_icon.py assets && cp -f assets/icon-512.png assets/icon.png",
     "engine": ".venv/bin/python scripts/build_engine.py",

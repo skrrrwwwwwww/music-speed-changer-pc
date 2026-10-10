@@ -61,9 +61,18 @@ class Server:
         self._last_state: Optional[dict] = None
         self._export_thread: Optional[threading.Thread] = None
         self._export_lock = threading.Lock()
-        self._library: dict = {"tracks": [], "roots": [], "scanning": False}
+        self._library: dict = {"tracks": [], "roots": [], "scanning": False, "durations": {}}
         self.lib_worker = library_mod.LibraryWorker(self._on_library)
+        self._durations: dict = {}
+        self.dur_worker = library_mod.DurationWorker(self._on_durations)
         self.running = True
+
+    def _start_durations(self) -> None:
+        """Запускает фоновый подсчёт длительностей, если есть что считать."""
+        tracks = self._library.get("tracks") or []
+        if not tracks or self.dur_worker.running:
+            return
+        self.dur_worker.start(tracks, library_mod.load_duration_cache())
 
     # ------------------------------------------------------------- библиотека
     def _on_library(self, result: dict) -> None:
@@ -73,6 +82,14 @@ class Server:
         self._library.update(result)
         self._library["scanning"] = False
         self.emit("library", **self._library)
+        self._start_durations()
+
+    def _on_durations(self, found: dict, final: bool) -> None:
+        self._durations.update(found)
+        self._library["durations"] = dict(self._durations)
+        if final and self._library.get("tracks"):
+            library_mod.save_duration_cache(self._library["tracks"], self._durations)
+        self.emit("libraryDurations", durations=self._durations, done=final)
 
     def library_state(self) -> dict:
         self._library.setdefault("home", str(Path.home()))

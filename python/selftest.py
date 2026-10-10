@@ -302,6 +302,19 @@ def test_seek_while_playing() -> None:
             eng.position() > 3.2,
             f"{eng.position():.2f} c",
         )
+
+        # Старт не должен оставлять очередь пустой: раньше play() сначала
+        # ставил _playing=True и наполнял очередь после, и аудиоколбэк успевал
+        # за это окно увидеть пустую очередь — щелчок на старте каждого трека.
+        eng.pause()
+        eng.seek(0.0)
+        eng.play()
+        check(
+            "Старт: очередь заполнена к моменту включения воспроизведения",
+            len(eng._queue) > 0 and eng._playing,
+            f"блоков в очереди {len(eng._queue)}, играет {eng._playing}",
+        )
+        check("Старт: счётчик срывов не растёт", eng._underruns == 0, f"underruns={eng._underruns}")
     finally:
         eng.close()
         try:
