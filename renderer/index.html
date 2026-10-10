@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self';"
+    />
+    <title>Music Speed Changer</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- Шапка -->
+      <header class="topbar">
+        <div class="brand">
+          <span class="logo">♪</span>
+          <div class="brand-text">
+            <strong>Music Speed Changer</strong>
+            <span id="engine-status" class="muted">запуск аудиодвижка…</span>
+          </div>
+        </div>
+
+        <div class="track-info">
+          <div id="track-title" class="track-title">Файл не загружен</div>
+          <div id="track-sub" class="track-sub muted">Ctrl+O или перетащите аудиофайл</div>
+        </div>
+
+        <div class="topbar-actions">
+          <button id="btn-lib" class="btn" title="Библиотека треков (L)">Библиотека</button>
+          <button id="btn-open" class="btn">Открыть</button>
+          <button id="btn-export" class="btn" disabled>Экспорт</button>
+        </div>
+      </header>
+
+      <!-- Волна + петля -->
+      <section class="wave-area">
+        <canvas id="wave" class="wave"></canvas>
+        <div id="wave-hint" class="wave-hint">перетащите файл сюда</div>
+        <div class="time-row">
+          <span id="time-cur" class="time">0:00.00</span>
+          <div class="time-mid">
+            <span id="loop-label" class="loop-label">A–B петля: выключена</span>
+          </div>
+          <span id="time-total" class="time">0:00.00</span>
+        </div>
+      </section>
+
+      <!-- Основные органы управления -->
+      <section class="controls" id="controls">
+        <!-- Скорость -->
+        <div class="panel knob-panel">
+          <div class="panel-title">Скорость</div>
+          <div class="knob-wrap">
+            <canvas id="knob" class="knob" width="260" height="260"></canvas>
+            <div class="knob-center">
+              <input
+                id="speed-value"
+                class="knob-value"
+                type="text"
+                inputmode="decimal"
+                autocomplete="off"
+                spellcheck="false"
+                value="1"
+                title="Кликните и введите скорость с точностью до сотых"
+              />
+              <div class="knob-unit">темп</div>
+            </div>
+          </div>
+          <div class="knob-hint">тяните мышью вверх-вниз · колесо · Shift+колесо — точнее</div>
+          <div id="bpm-row" class="bpm-row hidden">
+            <span class="muted">BPM</span>
+            <input id="bpm" class="bpm-input" type="number" min="40" max="300" step="0.1" />
+            <button id="bpm-apply" class="btn tiny">подогнать темп</button>
+          </div>
+          <div class="presets" id="speed-presets">
+            <button class="chip" data-speed="0.5">0.5×</button>
+            <button class="chip" data-speed="0.75">0.75×</button>
+            <button class="chip" data-speed="0.9">0.9×</button>
+            <button class="chip is-active" data-speed="1">1×</button>
+            <button class="chip" data-speed="1.1">1.1×</button>
+            <button class="chip" data-speed="1.25">1.25×</button>
+            <button class="chip" data-speed="1.5">1.5×</button>
+            <button class="chip" data-speed="2">2×</button>
+          </div>
+        </div>
+
+        <!-- Тон -->
+        <div class="panel pitch-panel">
+          <div class="panel-title">Тон (без смены темпа)</div>
+          <div class="pitch-readout">
+            <input
+              id="pitch-value"
+              class="pitch-value"
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
+              spellcheck="false"
+              value="0"
+              title="Кликните и введите значение с точностью до сотых"
+            />
+            <span class="pitch-unit">полутонов</span>
+          </div>
+          <div class="slider-row">
+            <span class="slider-cap">−12</span>
+            <input id="pitch" class="slider" type="range" min="-12" max="12" step="0.01" value="0" />
+            <span class="slider-cap">+12</span>
+          </div>
+          <div class="pitch-presets" id="pitch-presets">
+            <button class="chip small" data-pitch="-12">−12</button>
+            <button class="chip small" data-pitch="-7">−7</button>
+            <button class="chip small" data-pitch="-5">−5</button>
+            <button class="chip small" data-pitch="-1">−1</button>
+            <button class="chip small is-active" data-pitch="0">0</button>
+            <button class="chip small" data-pitch="1">+1</button>
+            <button class="chip small" data-pitch="5">+5</button>
+            <button class="chip small" data-pitch="7">+7</button>
+            <button class="chip small" data-pitch="12">+12</button>
+          </div>
+          <div class="note">
+            Отрицательные значения опускают голос/скрипку, положительные — поднимают.
+            Тон и темп независимы: можно менять одно, не трогая другого.
+          </div>
+        </div>
+
+        <!-- Транспорт -->
+        <div class="panel transport-panel">
+          <div class="panel-title">Воспроизведение</div>
+          <div class="transport">
+            <button id="btn-prev" class="btn round ghost" title="Предыдущий трек">⏮</button>
+            <button id="btn-play" class="btn round" title="Играть / пауза (Space)">▶</button>
+            <button id="btn-stop" class="btn round ghost" title="Стоп">■</button>
+            <button id="btn-next" class="btn round ghost" title="Следующий трек">⏭</button>
+          </div>
+          <label class="switch">
+            <input id="loop-toggle" type="checkbox" />
+            <span>Петля A–B (L)</span>
+          </label>
+          <div class="loop-actions">
+            <button id="btn-loop-mark" class="btn tiny">Отметить A</button>
+            <button id="btn-loop-mark-b" class="btn tiny">Отметить B</button>
+            <button id="btn-loop-clear" class="btn tiny ghost">Сбросить</button>
+          </div>
+          <div class="volume-row">
+            <span class="slider-cap">🔈</span>
+            <input id="volume" class="slider" type="range" min="0" max="1.4" step="0.01" value="0.9" />
+            <span id="volume-value" class="slider-cap">90%</span>
+          </div>
+          <label class="switch">
+            <input id="repeat-toggle" type="checkbox" />
+            <span>Повтор трека</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Библиотека -->
+      <div id="library-backdrop" class="library-backdrop hidden"></div>
+      <aside id="library" class="library hidden">
+        <div class="library-head">
+          <input
+            id="lib-search"
+            class="lib-search"
+            type="text"
+            placeholder="Поиск по библиотеке…"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button id="lib-refresh" class="btn tiny" title="Пересканировать">↻</button>
+          <button id="lib-add" class="btn tiny" title="Добавить папку">+</button>
+          <button id="lib-close" class="btn tiny" title="Закрыть (Esc)">✕</button>
+        </div>
+        <div id="lib-roots" class="lib-roots muted"></div>
+        <div id="lib-list" class="lib-list"></div>
+        <div id="lib-status" class="lib-status muted"></div>
+      </aside>
+
+      <footer class="statusbar">
+        <label class="device">
+          <span class="muted">устройство вывода</span>
+          <select id="device" class="select" title="Звуковая карта"></select>
+        </label>
+        <label class="switch" title="Файл, открытый двойным кликом в проводнике, сразу начнёт играть">
+          <input id="opt-autoplay" type="checkbox" checked />
+          <span>автозапуск из проводника</span>
+        </label>
+        <span id="status-audio" class="muted">аудио: —</span>
+        <span id="status-engine" class="muted">частота: —</span>
+        <span id="status-ffmpeg" class="muted">ffmpeg: —</span>
+        <span class="spacer"></span>
+        <span id="status-msg" class="muted"></span>
+      </footer>
+
+      <!-- Прогресс экспорта -->
+      <div id="export-overlay" class="overlay hidden">
+        <div class="overlay-card">
+          <div class="overlay-title">Экспорт…</div>
+          <div class="progress"><div id="export-bar" class="progress-bar"></div></div>
+          <div id="export-text" class="muted">Подготовка</div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,126 @@
+{
+  "name": "music-speed-changer",
+  "productName": "Music Speed Changer",
+  "version": "0.1.4",
+  "description": "Настольный аналог Android-приложения Music Speed Changer: темп и тон аудио в реальном времени (Python DSP + Electron UI)",
+  "main": "electron/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron . --no-sandbox",
+    "dev": "electron . --no-sandbox --silent",
+    "start:sandbox": "electron .",
+    "selftest": ".venv/bin/python python/selftest.py",
+    "e2e": "node scripts/e2e.mjs",
+    "test": "npm run selftest && npm run e2e",
+    "setup:py": "python3 -m venv .venv && .venv/bin/python -m pip install -r python/requirements.txt",
+    "icon": ".venv/bin/python scripts/make_icon.py assets && cp -f assets/icon-512.png assets/icon.png",
+    "engine": ".venv/bin/python scripts/build_engine.py",
+    "assets": "./scripts/prepare_assets.sh",
+    "dist": "./scripts/build_deb.sh",
+    "dist:standalone": "MSC_BUNDLE_FFMPEG=1 ./scripts/build_deb.sh",
+    "dist:dir": "npm run assets && npm run engine && electron-builder --dir",
+    "dist:appimage": "npm run assets && npm run engine && electron-builder --linux AppImage"
+  },
+  "keywords": [
+    "audio",
+    "pitch",
+    "tempo",
+    "time-stretch",
+    "music",
+    "electron",
+    "python"
+  ],
+  "homepage": "https://github.com/skrrrwwwwwww/music-speed-changer-pc",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/skrrrwwwwwww/music-speed-changer-pc.git"
+  },
+  "author": {
+    "name": "Music Speed Changer contributors",
+    "email": "noreply@example.com"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "dev.msc.app",
+    "productName": "MusicSpeedChanger",
+    "artifactName": "music-speed-changer-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": ["electron/**/*", "renderer/**/*", "package.json"],
+    "extraResources": [
+      {
+        "from": "build/pyinstaller/msc-engine",
+        "to": "bin/msc-engine"
+      }
+    ],
+    "linux": {
+      "target": ["deb"],
+      "executableName": "music-speed-changer",
+      "category": "AudioVideo",
+      "icon": "assets/icon.png",
+      "synopsis": "Изменение темпа и тона аудио в реальном времени",
+      "mimeTypes": [
+        "audio/mpeg",
+        "audio/mp4",
+        "audio/x-m4a",
+        "audio/aac",
+        "audio/ogg",
+        "audio/opus",
+        "audio/flac",
+        "audio/wav",
+        "audio/x-wav",
+        "audio/webm"
+      ],
+      "desktop": {
+        "Name": "Music Speed Changer",
+        "Name[ru]": "Music Speed Changer",
+        "GenericName": "Audio Speed and Pitch Changer",
+        "GenericName[ru]": "Изменение темпа и тона",
+        "Comment": "Меняйте темп и тон аудио в реальном времени",
+        "Comment[ru]": "Меняйте темп и тон аудио в реальном времени",
+        "Categories": "AudioVideo;Audio;Player;",
+        "Keywords": "audio;speed;tempo;pitch;music;player;",
+        "Keywords[ru]": "аудио;темп;тон;скорость;музыка;плеер;",
+        "Terminal": "false",
+        "StartupNotify": "true"
+      }
+    },
+    "deb": {
+      "priority": "optional",
+      "afterInstall": "scripts/postinst.sh",
+      "depends": [
+        "libc6",
+        "libasound2",
+        "libportaudio2",
+        "libgtk-3-0",
+        "libnss3",
+        "libxss1",
+        "libgbm1",
+        "libdrm2",
+        "libxkbcommon0",
+        "libcups2",
+        "libatk1.0-0",
+        "libatk-bridge2.0-0",
+        "libpango-1.0-0",
+        "libcairo2"
+      ],
+      "recommends": ["ffmpeg", "libnotify4", "libxtst6", "libsecret-1-0", "fonts-dejavu-core"],
+      "fpm": []
+    },
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "assets/icon.png"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.music",
+      "icon": "assets/icon.png"
+    }
+  }
+}

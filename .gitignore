@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+.venv/
+__pycache__/
+*.pyc
+*.log
+.DS_Store
+
+# Сгенерированные иконки (собираются scripts/make_icon.py)
+assets/icon*.png
