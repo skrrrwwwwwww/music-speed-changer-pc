@@ -1,7 +1,7 @@
 {
   "name": "music-speed-changer",
   "productName": "Music Speed Changer",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Настольный аналог Android-приложения Music Speed Changer: темп и тон аудио в реальном времени (Python DSP + Electron UI)",
   "main": "electron/main.js",
   "private": true,

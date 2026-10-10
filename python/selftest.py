@@ -242,6 +242,74 @@ def test_rates_and_rewrite() -> None:
     check("StreamPath: 48 кГц -> длительность / 1.25", abs(y.size - SR / 1.25) < 0.06 * SR + PV_TAIL, f"{y.size}")
 
 
+def test_seek_while_playing() -> None:
+    """Поиск по волне во время воспроизведения не должен замораживать
+    playhead. Раньше _pos_override оставался выставленным до нажатия паузы:
+    звук играл с нового места, а ползунок стоял."""
+    from msc.engine import Engine
+
+    sr = 22050
+    dur = 20.0
+    import tempfile
+
+    path = os.path.join(tempfile.gettempdir(), "msc-selftest-seek.wav")
+    import soundfile as sf
+
+    sf.write(path, tone(220.0, dur, sr), sr)
+    eng = Engine(silent=True, rate=sr, channels=1)
+    try:
+        eng.load(path)
+        eng.play()
+        time.sleep(0.6)
+
+        target = 10.0
+        eng.seek(target)
+        time.sleep(0.35)
+        p1 = eng.position()
+        check(
+            "Поиск на лету: позиция уехала с цели",
+            p1 > target + 0.05,
+            f"{p1:.2f} c сразу после seek({target:.0f})",
+        )
+        time.sleep(0.6)
+        p2 = eng.position()
+        check(
+            "Поиск на лету: playhead идёт, а не стоит",
+            p2 > p1 + 0.2,
+            f"{p1:.2f} → {p2:.2f} c за 0.6 c",
+        )
+        check(
+            "Поиск на лету: скорость позиции близка к 1x",
+            0.6 < (p2 - p1) / 0.6 < 1.6,
+            f"{(p2 - p1) / 0.6:.2f}x",
+        )
+
+        # На паузе позиция, наоборот, обязана стоять на месте.
+        eng.pause()
+        q1 = eng.position()
+        time.sleep(0.7)
+        q2 = eng.position()
+        check("Пауза: позиция не уезжает", abs(q2 - q1) < 0.02, f"{q1:.2f} → {q2:.2f}")
+
+        # Поиск на паузе обязан показывать ровно цель и продолжать с неё.
+        eng.seek(3.0)
+        time.sleep(0.2)
+        check("Поиск на паузе: позиция равна цели", abs(eng.position() - 3.0) < 0.02, f"{eng.position():.2f}")
+        eng.play()
+        time.sleep(0.4)
+        check(
+            "Поиск на паузе: воспроизведение продолжилось с цели",
+            eng.position() > 3.2,
+            f"{eng.position():.2f} c",
+        )
+    finally:
+        eng.close()
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
 def test_engine_silent() -> None:
     from msc.engine import Engine
 
@@ -518,6 +586,7 @@ def main() -> int:
     test_path()
     test_position_accounting()
     test_rates_and_rewrite()
+    test_seek_while_playing()
     test_engine_silent()
     test_loop_and_repeat()
     test_server_protocol()

@@ -281,8 +281,14 @@ class Engine:
 
     def seek(self, seconds: float) -> None:
         with self.lock:
-            self._pos_override = float(max(0.0, seconds))
-            self._seek_locked(self._pos_override)
+            target = float(max(0.0, seconds))
+            was_playing = self._playing
+            self._seek_locked(target)
+            # _pos_override означает «позиция заморожена» и сбрасывается только
+            # в play(). Если оставить его и во время воспроизведения, playhead
+            # стоял бы на цели поиска до нажатия паузы: звук играет, а ползунок
+            # стоит. На паузе заморозка нужна — позиция не должна «уезжать».
+            self._pos_override = None if was_playing else target
             self._paused = not self._playing
             if self._playing:
                 self._prime_locked()
