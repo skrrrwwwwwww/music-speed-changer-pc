@@ -55,6 +55,20 @@ sudo apt install ./music-speed-changer-<версия>-amd64.deb
 и импорт нестандартных форматов отключаются (кнопка «Экспорт» покажет
 подсказку).
 
+### Готовый пакет для Arch Linux
+
+```bash
+sudo pacman -U ./music-speed-changer-<версия>-1-x86_64.pkg.tar.zst
+```
+
+Ставит то же самое, что `.deb` на Ubuntu: `/opt/MusicSpeedChanger`, пункт
+в меню, иконки в тему hicolor и `/usr/bin/music-speed-changer` для запуска
+из терминала. SUID-права на `chrome-sandbox` выставляет сценарий установки
+пакета, поэтому `--no-sandbox` не нужен.
+
+Собрать такой пакет из исходников: `./scripts/build_arch.sh`
+(нужны `base-devel`, `ffmpeg`, `portaudio`; результат — в `dist/`).
+
 ### Сборка пакета из исходников
 
 ```bash

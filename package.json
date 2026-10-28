@@ -20,7 +20,8 @@
     "dist": "./scripts/build_deb.sh",
     "dist:standalone": "MSC_BUNDLE_FFMPEG=1 ./scripts/build_deb.sh",
     "dist:dir": "npm run assets && npm run engine && electron-builder --dir",
-    "dist:appimage": "npm run assets && npm run engine && electron-builder --linux AppImage"
+    "dist:appimage": "npm run assets && npm run engine && electron-builder --linux AppImage",
+    "dist:arch": "./scripts/build_arch.sh"
   },
   "keywords": [
     "audio",
