@@ -48,6 +48,54 @@ def _edge_fade(block: np.ndarray, fade_in: bool, fade_out: bool) -> np.ndarray:
     return block
 
 
+# Имена «системного умолчания» у разных звуковых серверов:
+#   PipeWire/PulseAudio — «Default Sink», ALSA — «default»/«pipewire»/«sysdefault».
+PREFERRED_OUTPUTS = ("default sink", "default", "pipewire", "pulse", "sysdefault")
+
+
+def _is_hdmi(name: str) -> bool:
+    low = name.lower()
+    return "hdmi" in low or "displayport" in low
+
+
+def pick_output_device(sd, wanted: Optional[str] = None) -> dict:
+    """Выбирает устройство вывода.
+
+    Порядок: явно выбранное пользователем → системное умолчание → умолчание
+    PortAudio → первое подходящее.
+
+    HDMI отодвигается в конец сознательно. На машине с HDMI-выходом PortAudio
+    нередко объявляет умолчанием именно его, звук уходит в разъём, к которому
+    ничего не подключено, и получается «играет, но тихо»: позиция идёт, а
+    слышно ничего. Если HDMI действительно нужен, его выбирают руками.
+    """
+    devices = [d for d in sd.query_devices() if int(d.get("max_output_channels", 0)) > 0]
+    if not devices:
+        raise RuntimeError("нет устройств вывода")
+
+    if wanted:
+        for d in devices:
+            if d.get("name") == wanted:
+                return d
+
+    by_name = {str(d.get("name", "")).strip().lower(): d for d in devices}
+    for pref in PREFERRED_OUTPUTS:
+        if pref in by_name:
+            return by_name[pref]
+
+    usable = [d for d in devices if not _is_hdmi(str(d.get("name", "")))]
+    try:
+        default = sd.query_devices(kind="output")
+        if default and not _is_hdmi(str(default.get("name", ""))):
+            return default
+    except Exception:  # noqa: BLE001
+        pass
+
+    if usable:
+        return usable[0]
+    return devices[0]
+
+
 class Engine:
     def __init__(
         self,
@@ -61,6 +109,7 @@ class Engine:
         self.device_name = device
         self.phase_lock = bool(phase_lock)
         self.device_info: dict = {}
+        self._device_index: Optional[int] = None
         self._forced_rate = int(rate) if rate else None
         self._forced_channels = int(channels) if channels else None
 
@@ -114,16 +163,12 @@ class Engine:
         try:
             import sounddevice as sd
 
-            dev = None
-            if self.device_name:
-                for d in sd.query_devices():
-                    if d.get("name") == self.device_name:
-                        dev = d
-                        break
-            if dev is None:
-                dev = sd.query_devices(kind="output")
+            dev = pick_output_device(sd, self.device_name)
             self.rate = int(round(float(dev["default_samplerate"])))
             self.channels = 2 if int(dev["max_output_channels"]) >= 2 else 1
+            # Индекс устройства нужен самому OutputStream: без него PortAudio
+            # открывает своё «умолчание», которое может оказаться HDMI.
+            self._device_index = int(dev["index"]) if dev.get("index") is not None else None
             self.device_info = {
                 "name": dev.get("name", ""),
                 "channels": int(dev["max_output_channels"]),
@@ -154,13 +199,23 @@ class Engine:
         def cb(outdata, frames, time_info, status):  # noqa: ANN001
             self._fill(outdata)
 
-        self._audio_out = sd.OutputStream(
-            samplerate=self.rate,
-            channels=self.channels,
-            dtype="float32",
-            blocksize=BLOCK,
-            callback=cb,
-        )
+        kwargs = {
+            "samplerate": self.rate,
+            "channels": self.channels,
+            "dtype": "float32",
+            "blocksize": BLOCK,
+            "callback": cb,
+        }
+        if self._device_index is not None:
+            # Явно открываем выбранное устройство. Раньше индекс только
+            # показывался в настройках, а поток всегда шёл в умолчание
+            # PortAudio — на машине с HDMI это был немой выход.
+            try:
+                self._audio_out = sd.OutputStream(device=self._device_index, **kwargs)
+            except Exception:  # noqa: BLE001
+                self._audio_out = sd.OutputStream(**kwargs)
+        else:
+            self._audio_out = sd.OutputStream(**kwargs)
         self._audio_out.start()
 
     # ------------------------------------------------------------------ load

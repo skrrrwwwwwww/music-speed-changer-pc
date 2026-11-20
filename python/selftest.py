@@ -323,6 +323,101 @@ def test_seek_while_playing() -> None:
             pass
 
 
+def test_output_device_pick() -> None:
+    """Выбор звукового устройства не должен уводить звук в HDMI."""
+    from msc.engine import pick_output_device
+
+    def fake(devices, default=None):
+        class SD:
+            def query_devices(self, device=None, kind=None):
+                if kind == "output":
+                    if default is None:
+                        raise RuntimeError("нет умолчания")
+                    return default
+                return devices
+
+        return SD()
+
+    hdmi = {"name": "HD-Audio Generic: HDMI 0 (hw:0,3)", "max_output_channels": 8, "default_samplerate": 44100.0}
+    default = {"name": "default", "max_output_channels": 128, "default_samplerate": 44100.0}
+    sink = {"name": "Default Sink", "max_output_channels": 32, "default_samplerate": 48000.0}
+    speaker = {"name": "HD-Audio Generic: SN6140 Analog (hw:1,0)", "max_output_channels": 2, "default_samplerate": 44100.0}
+
+    sd = fake([hdmi, default, speaker])
+    check("Устройство: системное умолчание важнее HDMI", pick_output_device(sd)["name"] == "default")
+
+    sd = fake([hdmi, sink, speaker])
+    check("Устройство: «Default Sink» от PipeWire", pick_output_device(sd)["name"] == "Default Sink")
+
+    # Умолчание само указывает на HDMI — всё равно берём живой аналоговый выход.
+    sd = fake([hdmi, speaker], default=hdmi)
+    check("Устройство: HDMI не выбирается как умолчание", pick_output_device(sd)["name"] == speaker["name"])
+
+    # Выбор пользователя главнее любых предпочтений.
+    sd = fake([hdmi, default, speaker])
+    check("Устройство: ручной выбор уважается", pick_output_device(sd, speaker["name"])["name"] == speaker["name"])
+
+    # Остался только HDMI — берём его, а не падаем.
+    sd = fake([hdmi])
+    check("Устройство: единственный выход HDMI подходит", pick_output_device(sd)["name"] == hdmi["name"])
+
+
+def test_output_stream_uses_chosen_device() -> None:
+    """Поток открывается на выбранном устройстве, а не на умолчании PortAudio."""
+    import sys
+    import types
+
+    from msc.engine import Engine
+
+    called: dict = {}
+
+    class FakeStream:
+        def __init__(self, **kwargs):
+            called.update(kwargs)
+
+        def start(self) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    devices = [
+        {
+            "index": 0,
+            "name": "HD-Audio Generic: HDMI 0 (hw:0,3)",
+            "max_output_channels": 8,
+            "default_samplerate": 44100.0,
+        },
+        {
+            "index": 6,
+            "name": "default",
+            "max_output_channels": 128,
+            "default_samplerate": 48000.0,
+        },
+    ]
+
+    fake = types.ModuleType("sounddevice")
+    fake.query_devices = lambda device=None, kind=None: devices if kind is None else devices[1]
+    fake.OutputStream = FakeStream
+
+    old = sys.modules.get("sounddevice")
+    sys.modules["sounddevice"] = fake
+    try:
+        eng = Engine()
+        check("Поток: открыт выбранный «default»", called.get("device") == 6, str(called.get("device")))
+        check("Поток: частота от устройства", called.get("samplerate") == 48000, str(called.get("samplerate")))
+        check("Поток: два канала", called.get("channels") == 2, str(called.get("channels")))
+        eng.close()
+    finally:
+        if old is not None:
+            sys.modules["sounddevice"] = old
+        else:
+            sys.modules.pop("sounddevice", None)
+
+
 def test_engine_silent() -> None:
     from msc.engine import Engine
 
@@ -600,6 +695,8 @@ def main() -> int:
     test_position_accounting()
     test_rates_and_rewrite()
     test_seek_while_playing()
+    test_output_device_pick()
+    test_output_stream_uses_chosen_device()
     test_engine_silent()
     test_loop_and_repeat()
     test_server_protocol()

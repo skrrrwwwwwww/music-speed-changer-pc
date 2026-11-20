@@ -175,18 +175,36 @@
       </aside>
 
       <footer class="statusbar">
-        <label class="device">
-          <span class="muted">устройство вывода</span>
-          <select id="device" class="select" title="Звуковая карта"></select>
-        </label>
-        <label class="switch" title="Файл, открытый двойным кликом в проводнике, сразу начнёт играть">
-          <input id="opt-autoplay" type="checkbox" checked />
-          <span>автозапуск из проводника</span>
-        </label>
-        <span id="status-audio" class="muted">аудио: —</span>
-        <span id="status-engine" class="muted">частота: —</span>
-        <span id="status-ffmpeg" class="muted">ffmpeg: —</span>
-        <span class="spacer"></span>
+        <div class="status-settings">
+          <label class="device">
+            <span class="muted">выход</span>
+            <select id="device" class="select" title="Устройство вывода звука"></select>
+          </label>
+          <label class="device" title="Тема оформления: как в системе, тёмная или светлая">
+            <span class="muted">тема</span>
+            <select id="theme" class="select theme-select">
+              <option value="system">как в системе</option>
+              <option value="dark">тёмная</option>
+              <option value="light">светлая</option>
+            </select>
+          </label>
+          <label class="device" title="Цвета: стандартные или из оформления рабочего стола">
+            <span class="muted">цвета</span>
+            <select id="colors" class="select theme-select">
+              <option value="standard">стандартные</option>
+              <option value="system">как в системе</option>
+            </select>
+          </label>
+          <label class="switch" title="Файл, открытый двойным кликом в проводнике, сразу начнёт играть">
+            <input id="opt-autoplay" type="checkbox" checked />
+            <span>автозапуск</span>
+          </label>
+        </div>
+        <div class="status-info">
+          <span id="status-audio" class="muted">аудио: —</span>
+          <span id="status-engine" class="muted">частота: —</span>
+          <span id="status-ffmpeg" class="muted">ffmpeg: —</span>
+        </div>
         <span id="status-msg" class="muted"></span>
       </footer>
 

@@ -1,9 +1,10 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, screen, nativeTheme } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { Sidecar } = require('./sidecar');
+const { readSystemPalette, watchSystemPalette } = require('./system-colors');
 
 const isDev = !app.isPackaged;
 
@@ -50,7 +51,9 @@ function safeJson(value) {
 /* --------------------------------------------------------------- настройки */
 /* Живут в файле, а не в localStorage: открыть файл из проводника можно и
    когда окно ещё не создано, и настройка нужна до готовности renderer. */
-const DEFAULTS = { autoplayExternal: true };
+const DEFAULTS = { autoplayExternal: true, theme: 'system', colors: 'standard' };
+const THEMES = new Set(['system', 'light', 'dark']);
+const COLOR_MODES = new Set(['standard', 'system']);
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
 let settings = { ...DEFAULTS };
 
@@ -75,8 +78,28 @@ function writeSettings() {
   }
 }
 
+/** Цвет окна до первой отрисовки — чтобы не мигало чужой темой. */
+function windowBackground() {
+  return nativeTheme.shouldUseDarkColors ? '#101219' : '#f1f4f9';
+}
+
+/**
+ * Применяет тему ко всему приложению: nativeTheme задаёт
+ * prefers-color-scheme для renderer (по нему работает CSS) и просит
+ * платформу использовать соответствующую тему для своих элементов.
+ */
+function applyTheme(value) {
+  const theme = THEMES.has(value) ? value : 'system';
+  settings.theme = theme;
+  nativeTheme.themeSource = theme;
+  if (win && !win.isDestroyed()) win.setBackgroundColor(windowBackground());
+  return theme;
+}
+
 function setSetting(key, value) {
   if (!(key in DEFAULTS)) throw new Error(`неизвестная настройка: ${key}`);
+  if (key === 'theme') value = applyTheme(value);
+  if (key === 'colors' && !COLOR_MODES.has(value)) value = 'standard';
   settings[key] = value;
   writeSettings();
   log(`настройка ${key} = ${JSON.stringify(value)}`);
@@ -84,6 +107,8 @@ function setSetting(key, value) {
 }
 
 readSettings();
+settings.theme = THEMES.has(settings.theme) ? settings.theme : 'system';
+settings.colors = COLOR_MODES.has(settings.colors) ? settings.colors : 'standard';
 
 /** Автозапуск при открытии файла из проводника.
  *  --autoplay / --no-autoplay в командной строке важнее сохранённого. */
@@ -201,12 +226,22 @@ ipcMain.handle('msc:selectDevice', async (_e, { name }) => {
 });
 
 function createWindow() {
+  // Не открываемся больше рабочего стола: на ноутбуках с высотой 768 px
+  // окно 800 px уходило под панель задач, и низ интерфейса был недоступен.
+  const area = screen.getPrimaryDisplay().workAreaSize;
+  const width = Math.max(900, Math.min(1180, area.width - 40));
+  const height = Math.max(640, Math.min(800, area.height - 40));
   win = new BrowserWindow({
-    width: 1180,
-    height: 800,
+    width,
+    height,
     minWidth: 900,
     minHeight: 640,
-    backgroundColor: '#12141a',
+    backgroundColor: windowBackground(),
+    // На Linux/Windows полоса меню рисуется GTK-темой и не следует за
+    // светлой темой приложения — тёмная плашка над белым окном выглядит
+    // чужой. Прячем её; Alt по-прежнему показывает меню, а сочетания
+    // клавиш продолжают работать.
+    autoHideMenuBar: process.platform !== 'darwin',
     title: 'Music Speed Changer',
     show: false,
     webPreferences: {
@@ -366,6 +401,9 @@ ipcMain.handle('msc:getSettings', () => settings);
 
 ipcMain.handle('msc:setSetting', (_e, key, value) => setSetting(key, value));
 
+/* Палитра рабочего стола для режима «цвета как в системе». */
+ipcMain.handle('msc:systemColors', () => readSystemPalette());
+
 ipcMain.handle('msc:openFile', async () => {
   const res = await dialog.showOpenDialog(win, {
     title: 'Открыть аудиофайл',
@@ -505,6 +543,15 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     log('app ready');
+    applyTheme(settings.theme);
+    // Системная тема может смениться на лету — обновляем фон окна,
+    // CSS и канвасы получат изменение через prefers-color-scheme.
+    nativeTheme.on('updated', () => {
+      if (win && !win.isDestroyed()) win.setBackgroundColor(windowBackground());
+    });
+    // Обои сменились — matugen переписал палитру. Отдаём новую в renderer,
+    // чтобы «цвета как в системе» обновились без перезапуска.
+    watchSystemPalette(() => send('msc:systemColorsChanged', readSystemPalette()));
     buildMenu();
     const silent = process.argv.includes('--silent');
     const deviceIdx = process.argv.indexOf('--device');

@@ -41,6 +41,14 @@ contextBridge.exposeInMainWorld('msc', {
   appInfo: () => ipcRenderer.invoke('msc:appInfo'),
   restartEngine: () => ipcRenderer.invoke('msc:restartEngine'),
 
+  /** Палитра рабочего стола для «цвета как в системе». */
+  systemColors: () => ipcRenderer.invoke('msc:systemColors'),
+  onSystemColors: (cb) => {
+    const handler = (_e, payload) => cb(payload);
+    ipcRenderer.on('msc:systemColorsChanged', handler);
+    return () => ipcRenderer.removeListener('msc:systemColorsChanged', handler);
+  },
+
   /** Подписка на события движка. Возвращает функцию отписки. */
   onEvent: (cb) => {
     const handler = (_e, payload) => cb(payload);

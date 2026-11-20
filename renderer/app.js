@@ -40,7 +40,7 @@ function cacheDom() {
     'knob', 'speed-value', 'speed-presets', 'pitch', 'pitch-value', 'pitch-presets',
     'btn-play', 'btn-stop', 'btn-prev', 'btn-next',
     'loop-toggle', 'btn-loop-mark', 'btn-loop-mark-b', 'btn-loop-clear',
-    'device', 'bpm-row', 'bpm', 'bpm-apply', 'opt-autoplay',
+    'device', 'theme', 'colors', 'bpm-row', 'bpm', 'bpm-apply', 'opt-autoplay',
     'btn-lib', 'library', 'lib-search', 'lib-refresh', 'lib-add', 'lib-close',
     'lib-list', 'lib-roots', 'lib-status', 'library-backdrop',
     'volume', 'volume-value', 'repeat-toggle', 'status-audio', 'status-engine', 'status-ffmpeg',
@@ -76,6 +76,268 @@ function send(cmd, args = {}) {
     flash(err.message || String(err), 'bad');
     throw err;
   });
+}
+
+/* --------------------------------------------------------------- палитра */
+/**
+ * Цвета для canvas. Берём их из CSS-переменных, а не из констант: тогда
+ * при смене темы (в т.ч. системной на лету) ручка и волна перекрашиваются
+ * вместе с остальным интерфейсом.
+ */
+const palette = {};
+
+function refreshPalette() {
+  const cs = getComputedStyle(document.documentElement);
+  const read = (name, fallback) => cs.getPropertyValue(name).trim() || fallback;
+  palette.accent = read('--accent', '#4ea1ff');
+  palette.accent2 = read('--accent-2', '#7c5cff');
+  palette.text = read('--text', '#e8ecf5');
+  palette.waveBg = read('--canvas-bg', '#141824');
+  palette.waveLine = read('--canvas-line', '#232a3a');
+  palette.waveGrid = read('--canvas-grid', 'rgba(255,255,255,0.045)');
+  palette.waveIdle = read('--wave-idle', '#3d4660');
+  palette.playhead = read('--playhead', '#ffffff');
+  palette.knobTrack = read('--knob-track', '#262c3a');
+  palette.knobTick = read('--knob-tick', '#39415a');
+  palette.knobCenter = read('--knob-center', '#171b26');
+  palette.loopFill = read('--loop-fill', 'rgba(255,255,255,0.06)');
+  palette.loopStroke = read('--loop-stroke', 'rgba(255,255,255,0.25)');
+  palette.loopFillOn = read('--loop-fill-on', 'rgba(255,180,84,0.14)');
+  palette.loopStrokeOn = read('--loop-stroke-on', 'rgba(255,180,84,0.85)');
+}
+
+function redrawThemedCanvases() {
+  refreshPalette();
+  drawKnob();
+  drawWave();
+}
+
+/* ------------------------------------------------------- системные цвета */
+/**
+ * Режим «цвета как в системе»: main.js отдаёт Material-палитру рабочего
+ * стола (rice/matugen, KDE, GNOME и т.п.), здесь она раскладывается по
+ * токенам приложения. Если у палитры нет второй половины (светлой или
+ * тёмной), она выводится из имеющейся — так тема и цвета остаются
+ * независимыми настройками.
+ */
+const SYSTEM_VARS = [
+  '--bg', '--bg-glow', '--panel', '--panel-2', '--line', '--text', '--muted',
+  '--accent', '--accent-2', '--accent-down', '--accent-soft', '--accent-text',
+  '--on-accent', '--on-good', '--good', '--good-down', '--warn', '--bad',
+  '--btn-hover', '--btn-hover-line', '--chrome-bg', '--field-hover', '--backdrop',
+  '--overlay-bg', '--panel-shadow', '--progress-track', '--library-bg',
+  '--canvas-bg', '--canvas-line', '--canvas-grid', '--wave-idle', '--playhead',
+  '--knob-track', '--knob-tick', '--knob-center', '--range-from', '--range-to',
+  '--thumb-border', '--loop-fill', '--loop-stroke', '--loop-fill-on', '--loop-stroke-on',
+];
+const systemColors = { raw: null, tokens: null };
+
+function parseColor(value) {
+  if (typeof value !== 'string') return null;
+  let v = value.trim().toLowerCase();
+  if (/^#[0-9a-f]{3}$/.test(v)) v = `#${v[1]}${v[1]}${v[2]}${v[2]}${v[3]}${v[3]}`;
+  if (!/^#[0-9a-f]{6}$/.test(v)) return null;
+  return { r: parseInt(v.slice(1, 3), 16), g: parseInt(v.slice(3, 5), 16), b: parseInt(v.slice(5, 7), 16) };
+}
+
+function colorToHex(rgb) {
+  const p = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+  return `#${p(rgb.r)}${p(rgb.g)}${p(rgb.b)}`;
+}
+
+function mixColor(a, b, t) {
+  const x = parseColor(a);
+  const y = parseColor(b);
+  if (!x || !y) return a;
+  return colorToHex({
+    r: x.r + (y.r - x.r) * t,
+    g: x.g + (y.g - x.g) * t,
+    b: x.b + (y.b - x.b) * t,
+  });
+}
+
+function colorAlpha(color, alpha) {
+  const c = parseColor(color);
+  return c ? `rgba(${c.r}, ${c.g}, ${c.b}, ${alpha})` : color;
+}
+
+function colorLuminance(color) {
+  const c = parseColor(color);
+  if (!c) return 0;
+  const lin = (v) => {
+    const s = v / 255;
+    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
+}
+
+function colorContrast(a, b) {
+  const la = colorLuminance(a);
+  const lb = colorLuminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+function readableOn(color) {
+  return colorContrast(color, '#ffffff') >= colorContrast(color, '#000000') ? '#ffffff' : '#000000';
+}
+
+function ensureContrast(color, bg, ratio = 4.5) {
+  if (colorContrast(color, bg) >= ratio) return color;
+  const toward = colorContrast('#ffffff', bg) >= colorContrast('#000000', bg) ? '#ffffff' : '#000000';
+  for (let i = 1; i <= 20; i += 1) {
+    const c = mixColor(color, toward, i / 20);
+    if (colorContrast(c, bg) >= ratio) return c;
+  }
+  return toward;
+}
+
+/** Достраивает светлую или тёмную палитру из имеющейся. */
+function derivePalette(p, target) {
+  if (p.mode === target) return p;
+  if (target === 'light') {
+    const surface = mixColor(p.surface, '#ffffff', 0.94);
+    const q = {
+      mode: 'light',
+      surface,
+      surface_low: mixColor(p.surface_low, '#ffffff', 0.97),
+      surface_container: mixColor(p.surface_container, '#ffffff', 0.985),
+      surface_high: mixColor(p.surface_high, '#ffffff', 0.9),
+      surface_highest: mixColor(p.surface_highest, '#ffffff', 0.85),
+      on_surface: mixColor(p.on_surface, '#000000', 0.88),
+      on_surface_variant: mixColor(p.on_surface_variant, '#000000', 0.58),
+      outline: ensureContrast(mixColor(p.outline, '#000000', 0.3), surface, 2.5),
+      outline_variant: mixColor(p.outline_variant, '#ffffff', 0.58),
+      primary: ensureContrast(p.primary, surface, 4.5),
+      secondary: ensureContrast(p.secondary, surface, 4.5),
+      tertiary: ensureContrast(p.tertiary, surface, 4.5),
+      error: ensureContrast(p.error, surface, 4.5),
+    };
+    q.on_primary = readableOn(q.primary);
+    q.primary_container = mixColor(q.primary, '#ffffff', 0.8);
+    q.on_primary_container = ensureContrast(q.primary, q.primary_container, 4.5);
+    q.secondary_container = mixColor(q.secondary, '#ffffff', 0.82);
+    return q;
+  }
+  const surface = mixColor(p.surface, '#000000', 0.93);
+  const q = {
+    mode: 'dark',
+    surface,
+    surface_low: mixColor(p.surface_low, '#000000', 0.9),
+    surface_container: mixColor(p.surface_container, '#000000', 0.85),
+    surface_high: mixColor(p.surface_high, '#000000', 0.72),
+    surface_highest: mixColor(p.surface_highest, '#000000', 0.62),
+    on_surface: mixColor(p.on_surface, '#ffffff', 0.87),
+    on_surface_variant: mixColor(p.on_surface_variant, '#ffffff', 0.5),
+    outline: mixColor(p.outline, '#ffffff', 0.2),
+    outline_variant: mixColor(p.outline_variant, '#000000', 0.45),
+    primary: ensureContrast(p.primary, surface, 4.5),
+    secondary: ensureContrast(p.secondary, surface, 4.5),
+    tertiary: ensureContrast(p.tertiary, surface, 4.5),
+    error: ensureContrast(p.error, surface, 4.5),
+  };
+  q.on_primary = readableOn(q.primary);
+  q.primary_container = mixColor(q.primary, surface, 0.7);
+  q.on_primary_container = ensureContrast(q.primary, q.primary_container, 4.5);
+  q.secondary_container = mixColor(q.secondary, surface, 0.75);
+  return q;
+}
+
+/** Палитра -> CSS-переменные приложения. */
+function paletteToTokens(p, mode) {
+  const dark = mode === 'dark';
+  const accent = p.primary;
+  const accent2 = p.tertiary || p.secondary;
+  const good = p.tertiary || p.secondary;
+  return {
+    '--bg': p.surface,
+    '--bg-glow': dark ? mixColor(p.surface, p.on_surface, 0.07) : mixColor(p.surface, '#ffffff', 0.65),
+    '--panel': p.surface_container,
+    '--panel-2': p.surface_high,
+    '--line': p.outline_variant,
+    '--text': p.on_surface,
+    '--muted': mixColor(p.on_surface_variant, p.surface, dark ? 0.22 : 0.3),
+    '--accent': accent,
+    '--accent-2': accent2,
+    '--accent-down': dark ? mixColor(accent, p.surface, 0.3) : mixColor(accent, '#000000', 0.18),
+    '--accent-soft': colorAlpha(accent, dark ? 0.16 : 0.12),
+    '--accent-text': ensureContrast(accent, p.surface_container, 4.5),
+    '--on-accent': ensureContrast(p.on_primary || readableOn(accent), accent, 4.5),
+    '--on-good': readableOn(good),
+    '--good': ensureContrast(good, p.surface, 4.5),
+    '--good-down': mixColor(good, dark ? p.surface : '#000000', 0.25),
+    '--warn': dark ? '#ffb454' : '#a86a0b',
+    '--bad': ensureContrast(p.error, p.surface, 4.5),
+    '--btn-hover': p.surface_high,
+    '--btn-hover-line': p.outline,
+    '--chrome-bg': colorAlpha(p.surface, dark ? 0.6 : 0.76),
+    '--field-hover': colorAlpha(p.on_surface, dark ? 0.03 : 0.04),
+    '--backdrop': dark ? 'rgba(0, 0, 0, 0.5)' : 'rgba(24, 34, 54, 0.25)',
+    '--overlay-bg': colorAlpha(p.surface, dark ? 0.72 : 0.8),
+    '--panel-shadow': dark ? '-8px 0 24px rgba(0, 0, 0, 0.45)' : '0 12px 32px rgba(30, 45, 80, 0.18)',
+    '--progress-track': p.surface_high,
+    '--library-bg': p.surface_low,
+    '--canvas-bg': p.surface_low,
+    '--canvas-line': p.outline_variant,
+    '--canvas-grid': colorAlpha(p.on_surface, dark ? 0.045 : 0.07),
+    '--wave-idle': mixColor(p.on_surface_variant, p.surface, dark ? 0.42 : 0.52),
+    '--playhead': p.on_surface,
+    '--knob-track': p.surface_highest,
+    '--knob-tick': p.outline,
+    '--knob-center': p.surface_low,
+    '--range-from': p.surface_high,
+    '--range-to': p.outline_variant,
+    '--thumb-border': p.surface,
+    '--loop-fill': colorAlpha(p.on_surface, dark ? 0.06 : 0.05),
+    '--loop-stroke': colorAlpha(p.on_surface, dark ? 0.25 : 0.22),
+    '--loop-fill-on': colorAlpha(accent2, dark ? 0.14 : 0.12),
+    '--loop-stroke-on': colorAlpha(accent2, 0.8),
+  };
+}
+
+function buildSystemTokens(raw) {
+  const base = raw.palette;
+  const light = derivePalette(base, 'light');
+  const dark = derivePalette(base, 'dark');
+  return { light: paletteToTokens(light, 'light'), dark: paletteToTokens(dark, 'dark') };
+}
+
+function applySystemTokens() {
+  if (!systemColors.tokens) return;
+  const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const tokens = systemColors.tokens[dark ? 'dark' : 'light'];
+  const style = document.documentElement.style;
+  for (const [name, value] of Object.entries(tokens)) style.setProperty(name, value);
+}
+
+function clearSystemTokens() {
+  const style = document.documentElement.style;
+  for (const name of SYSTEM_VARS) style.removeProperty(name);
+}
+
+/** Применяет выбранный режим цветов и перерисовывает канвасы. */
+function syncSystemColors() {
+  if (el.colors && el.colors.value === 'system' && systemColors.tokens) applySystemTokens();
+  else clearSystemTokens();
+  redrawThemedCanvases();
+}
+
+async function loadSystemColors() {
+  if (!window.msc.systemColors) return false;
+  try {
+    const raw = await window.msc.systemColors();
+    if (!raw || !raw.palette) {
+      systemColors.raw = null;
+      systemColors.tokens = null;
+      return false;
+    }
+    systemColors.raw = raw;
+    systemColors.tokens = buildSystemTokens(raw);
+    return true;
+  } catch {
+    systemColors.raw = null;
+    systemColors.tokens = null;
+    return false;
+  }
 }
 
 /* ------------------------------------------------------------------ knob */
@@ -121,21 +383,21 @@ function drawKnob() {
   // дуга
   ctx.lineWidth = 12;
   ctx.lineCap = 'round';
-  ctx.strokeStyle = '#262c3a';
+  ctx.strokeStyle = palette.knobTrack;
   ctx.beginPath();
   ctx.arc(cx, cy, R, knob.a0, knob.a0 + knob.span);
   ctx.stroke();
 
   const grad = ctx.createLinearGradient(0, 0, size, size);
-  grad.addColorStop(0, '#4ea1ff');
-  grad.addColorStop(1, '#7c5cff');
+  grad.addColorStop(0, palette.accent);
+  grad.addColorStop(1, palette.accent2);
   ctx.strokeStyle = grad;
   ctx.beginPath();
   ctx.arc(cx, cy, R, knob.a0, knob.a0 + knob.span * t);
   ctx.stroke();
 
   // деления
-  ctx.strokeStyle = '#39415a';
+  ctx.strokeStyle = palette.knobTick;
   ctx.lineWidth = 2;
   for (let i = 0; i <= 8; i++) {
     const a = knob.a0 + (knob.span * i) / 8;
@@ -152,7 +414,7 @@ function drawKnob() {
   ctx.save();
   ctx.translate(cx, cy);
   ctx.rotate(a);
-  ctx.fillStyle = '#e8ecf5';
+  ctx.fillStyle = palette.text;
   ctx.beginPath();
   ctx.moveTo(R - 3, 0);
   ctx.lineTo(R - 23, -5.5);
@@ -162,7 +424,7 @@ function drawKnob() {
   ctx.restore();
 
   // подложка круга
-  ctx.fillStyle = '#171b26';
+  ctx.fillStyle = palette.knobCenter;
   ctx.beginPath();
   ctx.arc(cx, cy, R - 30, 0, Math.PI * 2);
   ctx.fill();
@@ -259,6 +521,10 @@ function setupKnob() {
     e.preventDefault();
   });
   c.tabIndex = 0;
+
+  // При изменении окна ручка меняет размер по CSS — перерисовываем её
+  // в новом разрешении, иначе канвас растягивается и выглядит мыльным.
+  new ResizeObserver(() => drawKnob()).observe(c);
 }
 
 /* ------------------------------------------------------------------ wave */
@@ -369,9 +635,9 @@ function drawWave() {
   ctx.clearRect(0, 0, w, h);
 
   // фон и центральная линия
-  ctx.fillStyle = '#141824';
+  ctx.fillStyle = palette.waveBg;
   ctx.fillRect(0, 0, w, h);
-  ctx.strokeStyle = '#232a3a';
+  ctx.strokeStyle = palette.waveLine;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, h / 2);
@@ -380,7 +646,7 @@ function drawWave() {
 
   // сетка каждые 10 секунд
   if (state.duration > 0) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.045)';
+    ctx.strokeStyle = palette.waveGrid;
     const stepSec = state.duration > 600 ? 60 : state.duration > 120 ? 10 : 5;
     for (let t = stepSec; t < state.duration; t += stepSec) {
       const x = Math.round((t / state.duration) * w) + 0.5;
@@ -421,7 +687,7 @@ function drawWave() {
             ctx.rect(x0, yTop, mid2, Math.max(1, yBot - yTop));
           }
         }
-        ctx.fillStyle = pass === 0 ? '#3d4660' : '#4ea1ff';
+        ctx.fillStyle = pass === 0 ? palette.waveIdle : palette.accent;
         ctx.globalAlpha = pass === 0 ? 0.55 : 0.95;
         ctx.fill();
       }
@@ -433,9 +699,9 @@ function drawWave() {
   if (state.loop.end > state.loop.start) {
     const x0 = (state.loop.start / state.duration) * w;
     const x1 = (state.loop.end / state.duration) * w;
-    ctx.fillStyle = state.loop.enabled ? 'rgba(255,180,84,0.14)' : 'rgba(255,255,255,0.06)';
+    ctx.fillStyle = state.loop.enabled ? palette.loopFillOn : palette.loopFill;
     ctx.fillRect(x0, 0, x1 - x0, h);
-    ctx.strokeStyle = state.loop.enabled ? 'rgba(255,180,84,0.85)' : 'rgba(255,255,255,0.25)';
+    ctx.strokeStyle = state.loop.enabled ? palette.loopStrokeOn : palette.loopStroke;
     ctx.lineWidth = 1.5;
     for (const x of [x0, x1]) {
       ctx.beginPath();
@@ -448,13 +714,13 @@ function drawWave() {
   // playhead
   if (state.duration > 0) {
     const x = Math.round((state.position / state.duration) * w) + 0.5;
-    ctx.strokeStyle = '#ffffff';
+    ctx.strokeStyle = palette.playhead;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, h);
     ctx.stroke();
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = palette.playhead;
     ctx.beginPath();
     ctx.moveTo(x - 5, 0);
     ctx.lineTo(x + 5, 0);
@@ -1096,6 +1362,43 @@ function setupUi() {
   el['lib-add'].addEventListener('click', pickFolder);
   library.current = null;
 
+  // Тема: main.js переключает nativeTheme, CSS реагирует на
+  // prefers-color-scheme. Канвасы перерисовываем после смены палитры.
+  el.theme.addEventListener('change', async (e) => {
+    const value = el.theme.value;
+    try {
+      await window.msc.setSetting('theme', value);
+      // prefers-color-scheme переключится в следующем кадре; для режима
+      // системных цветов берём уже другую (светлую/тёмную) половину палитры.
+      requestAnimationFrame(() => syncSystemColors());
+      const names = { system: 'как в системе', dark: 'тёмная', light: 'светлая' };
+      flash(`Тема: ${names[value] || value}`);
+    } catch (err) {
+      flash(`Не сохранилась тема: ${err.message || err}`, 'bad');
+    }
+  });
+
+  // Цвета: стандартные или из палитры рабочего стола.
+  el.colors.addEventListener('change', async () => {
+    const value = el.colors.value;
+    if (value === 'system') {
+      const ok = await loadSystemColors();
+      if (!ok) {
+        el.colors.value = 'standard';
+        syncSystemColors();
+        flash('Не нашёл палитру системы — оставил стандартные цвета', 'bad');
+        return;
+      }
+    }
+    try {
+      await window.msc.setSetting('colors', value);
+      syncSystemColors();
+      flash(value === 'system' ? 'Цвета: как в системе' : 'Цвета: стандартные');
+    } catch (err) {
+      flash(`Не сохранились цвета: ${err.message || err}`, 'bad');
+    }
+  });
+
   // Автозапуск файлов, открытых двойным кликом в проводнике.
   el['opt-autoplay'].addEventListener('change', async (e) => {
     const on = e.target.checked;
@@ -1169,6 +1472,7 @@ function setupUi() {
   // Смена звуковой карты требует перезапуска аудиодвижка.
   el.device.addEventListener('change', async (e) => {
     const name = e.target.value;
+    el.device.title = `Устройство вывода: ${name}`;
     try {
       localStorage.setItem('msc.device', name);
       await window.msc.cmd('selectDevice', { name });
@@ -1198,6 +1502,7 @@ function setupUi() {
       } else {
         el.device.value = outs[0].name;
       }
+      el.device.title = `Устройство вывода: ${el.device.value}`;
     } catch {
       el.device.innerHTML = '<option value="">(неизвестно)</option>';
     }
@@ -1337,6 +1642,7 @@ function setupUi() {
 /* ------------------------------------------------------------------ init */
 function init() {
   cacheDom();
+  refreshPalette();
   setupWave();
   setupKnob();
   setupUi();
@@ -1344,6 +1650,14 @@ function init() {
   setPitch(0, { silentUi: true });
   drawKnob();
   drawWave();
+
+  // Система сменила светлую/тёмную тему: CSS обновится сам по
+  // prefers-color-scheme. Для системных цветов берём другую половину
+  // палитры, канвасы перерисовываем в любом случае.
+  const scheme = window.matchMedia('(prefers-color-scheme: dark)');
+  const onSchemeChange = () => syncSystemColors();
+  if (scheme.addEventListener) scheme.addEventListener('change', onSchemeChange);
+  else scheme.addListener(onSchemeChange);
 
   window.__MSC_DEBUG = new URLSearchParams(location.search).has('debug');
   window.msc.onEvent((ev) => {
@@ -1368,11 +1682,41 @@ function init() {
     el['engine-status'].textContent = `v${info.version} · Electron ${info.electron}`;
   });
 
-  // Сохранённая настройка автозапуска из проводника.
+  // Обои сменились — палитра переписана. Обновляем цвета, если включены.
+  if (window.msc.onSystemColors) {
+    window.msc.onSystemColors((raw) => {
+      if (!raw || !raw.palette) {
+        systemColors.raw = null;
+        systemColors.tokens = null;
+        if (el.colors.value === 'system') {
+          el.colors.value = 'standard';
+          syncSystemColors();
+          flash('Системная палитра пропала — вернул стандартные цвета', 'bad');
+        }
+        return;
+      }
+      systemColors.raw = raw;
+      systemColors.tokens = buildSystemTokens(raw);
+      if (el.colors.value === 'system') syncSystemColors();
+    });
+  }
+
+  // Сохранённые настройки: автозапуск из проводника, тема и цвета.
   window.msc
     .getSettings()
     .then((s) => {
       el['opt-autoplay'].checked = s.autoplayExternal !== false;
+      el.theme.value = s.theme || 'system';
+      el.colors.value = s.colors === 'system' ? 'system' : 'standard';
+      if (el.colors.value === 'system') {
+        loadSystemColors().then((ok) => {
+          if (!ok) {
+            el.colors.value = 'standard';
+            setStatus('Системная палитра не найдена — стандартные цвета', 'bad');
+          }
+          syncSystemColors();
+        });
+      }
     })
     .catch(() => {
       el['opt-autoplay'].checked = true;

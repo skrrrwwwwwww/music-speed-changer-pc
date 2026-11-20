@@ -1,17 +1,101 @@
+/* Светлая тема — по умолчанию. Тёмная включается через
+   prefers-color-scheme: main.js ставит nativeTheme.themeSource по настройке
+   (системная / тёмная / светлая), и Chromium сам переключает медиазапрос. */
 :root {
-  --bg: #101219;
-  --bg-2: #161923;
-  --panel: #1b1f2b;
-  --panel-2: #222736;
-  --line: #2a3040;
-  --text: #e8ecf5;
-  --muted: #8b93a7;
-  --accent: #4ea1ff;
-  --accent-2: #7c5cff;
-  --good: #46d39a;
-  --warn: #ffb454;
-  --bad: #ff6b6b;
+  color-scheme: light;
+  --bg: #f1f4f9;
+  --bg-2: #ffffff;
+  --bg-glow: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #eef2f8;
+  --line: #d8dfea;
+  --text: #1b2231;
+  --muted: #697285;
+  --accent: #2f7ce0;
+  --accent-2: #6a4cf0;
+  --accent-down: #2a6ac5;
+  --good: #17a176;
+  --good-down: #118a63;
+  --warn: #b97710;
+  --bad: #d64545;
+  --accent-soft: rgba(47, 124, 224, 0.12);
+  --accent-text: #1a5bb0;
+  --on-accent: #ffffff;
+  --on-good: #0b0d10;
+  --btn-hover: #e6ebf4;
+  --btn-hover-line: #b9c4d7;
+  --chrome-bg: rgba(255, 255, 255, 0.76);
+  --field-hover: rgba(27, 34, 49, 0.04);
+  --backdrop: rgba(24, 34, 54, 0.25);
+  --overlay-bg: rgba(240, 243, 249, 0.78);
+  --panel-shadow: 0 12px 32px rgba(30, 45, 80, 0.18);
+  --progress-track: #e4e9f2;
+  --library-bg: #ffffff;
+  --canvas-bg: #f7f9fd;
+  --canvas-line: #dce3ee;
+  --canvas-grid: rgba(27, 34, 49, 0.07);
+  --wave-idle: #a9b6cd;
+  --playhead: #1b2231;
+  --knob-track: #dce3ee;
+  --knob-tick: #bcc7d9;
+  --knob-center: #f7f9fd;
+  --range-from: #dce3ee;
+  --range-to: #c1cbdb;
+  --thumb-border: #ffffff;
+  --loop-fill: rgba(27, 34, 49, 0.05);
+  --loop-stroke: rgba(27, 34, 49, 0.22);
+  --loop-fill-on: rgba(185, 119, 16, 0.12);
+  --loop-stroke-on: rgba(185, 119, 16, 0.8);
   --radius: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #101219;
+    --bg-2: #161923;
+    --bg-glow: #1b2133;
+    --panel: #1b1f2b;
+    --panel-2: #222736;
+    --line: #2a3040;
+    --text: #e8ecf5;
+    --muted: #8b93a7;
+    --accent: #4ea1ff;
+    --accent-2: #7c5cff;
+    --accent-down: #3a7fd5;
+    --good: #46d39a;
+    --good-down: #2fa87a;
+    --warn: #ffb454;
+    --bad: #ff6b6b;
+    --accent-soft: rgba(78, 161, 255, 0.16);
+    --accent-text: #cfe4ff;
+    --on-accent: #ffffff;
+    --on-good: #0b0d10;
+    --btn-hover: #2a3040;
+    --btn-hover-line: #3a4660;
+    --chrome-bg: rgba(22, 25, 35, 0.6);
+    --field-hover: rgba(255, 255, 255, 0.03);
+    --backdrop: rgba(8, 10, 14, 0.5);
+    --overlay-bg: rgba(8, 10, 14, 0.7);
+    --panel-shadow: -8px 0 24px rgba(0, 0, 0, 0.45);
+    --progress-track: #262c3a;
+    --library-bg: #141824;
+    --canvas-bg: #141824;
+    --canvas-line: #232a3a;
+    --canvas-grid: rgba(255, 255, 255, 0.045);
+    --wave-idle: #3d4660;
+    --playhead: #ffffff;
+    --knob-track: #262c3a;
+    --knob-tick: #39415a;
+    --knob-center: #171b26;
+    --range-from: #2a3040;
+    --range-to: #39415a;
+    --thumb-border: #0d1017;
+    --loop-fill: rgba(255, 255, 255, 0.06);
+    --loop-stroke: rgba(255, 255, 255, 0.25);
+    --loop-fill-on: rgba(255, 180, 84, 0.14);
+    --loop-stroke-on: rgba(255, 180, 84, 0.85);
+  }
 }
 
 * {
@@ -33,7 +117,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: radial-gradient(1200px 600px at 50% -10%, #1b2133 0%, var(--bg) 60%);
+  background: radial-gradient(1200px 600px at 50% -10%, var(--bg-glow) 0%, var(--bg) 60%);
 }
 
 .muted {
@@ -54,7 +138,7 @@ body {
   gap: 18px;
   padding: 12px 18px;
   border-bottom: 1px solid var(--line);
-  background: rgba(22, 25, 35, 0.6);
+  background: var(--chrome-bg);
 }
 
 .brand {
@@ -71,7 +155,7 @@ body {
   border-radius: 10px;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   font-size: 18px;
-  color: #fff;
+  color: var(--on-accent);
 }
 .brand-text {
   display: flex;
@@ -118,8 +202,8 @@ body {
   transition: background 0.12s, border-color 0.12s, transform 0.06s;
 }
 .btn:hover:not(:disabled) {
-  background: #2a3040;
-  border-color: #3a4660;
+  background: var(--btn-hover);
+  border-color: var(--btn-hover-line);
 }
 .btn:active:not(:disabled) {
   transform: translateY(1px);
@@ -143,16 +227,19 @@ body {
   font-size: 18px;
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, var(--accent), #3a7fd5);
+  background: linear-gradient(135deg, var(--accent), var(--accent-down));
   border-color: transparent;
+  color: var(--on-accent);
 }
 .btn.round.ghost {
   background: var(--panel-2);
   border-color: var(--line);
   font-size: 14px;
+  color: var(--text);
 }
 #btn-play.playing {
-  background: linear-gradient(135deg, var(--good), #2fa87a);
+  background: linear-gradient(135deg, var(--good), var(--good-down));
+  color: var(--on-good);
 }
 
 .chip {
@@ -168,12 +255,12 @@ body {
 }
 .chip:hover {
   color: var(--text);
-  border-color: #3a4660;
+  border-color: var(--btn-hover-line);
 }
 .chip.is-active {
-  background: rgba(78, 161, 255, 0.16);
+  background: var(--accent-soft);
   border-color: var(--accent);
-  color: #cfe4ff;
+  color: var(--accent-text);
 }
 .chip.small {
   padding: 4px 9px;
@@ -297,12 +384,12 @@ body {
 }
 .knob-value:hover {
   border-color: var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--field-hover);
 }
 .knob-value:focus {
   outline: none;
   border-color: var(--accent);
-  background: rgba(78, 161, 255, 0.1);
+  background: var(--accent-soft);
 }
 .knob-value::-webkit-outer-spin-button,
 .knob-value::-webkit-inner-spin-button {
@@ -354,12 +441,12 @@ body {
 }
 .pitch-value:hover {
   border-color: var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--field-hover);
 }
 .pitch-value:focus {
   outline: none;
   border-color: var(--accent);
-  background: rgba(78, 161, 255, 0.1);
+  background: var(--accent-soft);
 }
 .pitch-value::-webkit-outer-spin-button,
 .pitch-value::-webkit-inner-spin-button {
@@ -388,7 +475,7 @@ body {
   flex: 1;
   height: 6px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #2a3040, #39415a);
+  background: linear-gradient(90deg, var(--range-from), var(--range-to));
   outline: none;
 }
 .slider::-webkit-slider-thumb {
@@ -397,13 +484,13 @@ body {
   height: 18px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
-  border: 2px solid #0d1017;
+  border: 2px solid var(--thumb-border);
   cursor: pointer;
 }
 .slider::-moz-range-thumb {
   width: 18px;
   height: 18px;
-  border: 2px solid #0d1017;
+  border: 2px solid var(--thumb-border);
   border-radius: 50%;
   background: var(--accent);
   cursor: pointer;
@@ -448,7 +535,7 @@ body {
 .library-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(8, 10, 14, 0.5);
+  background: var(--backdrop);
   z-index: 19;
 }
 .library {
@@ -461,9 +548,9 @@ body {
   flex-direction: column;
   gap: 8px;
   padding: 12px;
-  background: #141824;
+  background: var(--library-bg);
   border-left: 1px solid var(--line);
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--panel-shadow);
   z-index: 20;
 }
 .library-head {
@@ -577,7 +664,7 @@ body {
   cursor: pointer;
   position: sticky;
   top: 0;
-  background: #141824;
+  background: var(--library-bg);
   z-index: 1;
 }
 .lib-group:hover {
@@ -626,7 +713,7 @@ body {
   background: var(--panel-2);
 }
 .lib-item.is-current {
-  background: rgba(78, 161, 255, 0.14);
+  background: var(--accent-soft);
   border-color: var(--accent);
 }
 .lib-item .t {
@@ -686,8 +773,10 @@ body {
   border-radius: 8px;
   padding: 4px 8px;
   font-size: 11px;
-  max-width: 260px;
+  /* Длинные имена звуковых карт не должны раздувать всю нижнюю панель. */
+  max-width: 190px;
   cursor: pointer;
+  text-overflow: ellipsis;
 }
 .select:disabled {
   opacity: 0.5;
@@ -727,17 +816,38 @@ body {
 .statusbar {
   display: flex;
   align-items: center;
-  gap: 18px;
-  padding: 8px 18px;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 7px 16px;
   border-top: 1px solid var(--line);
-  background: rgba(22, 25, 35, 0.6);
+  background: var(--chrome-bg);
+}
+.status-settings,
+.status-info {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  min-width: 0;
+}
+.status-info {
+  gap: 4px 14px;
+}
+.statusbar .muted {
+  white-space: nowrap;
+}
+/* Служебное сообщение прижимается вправо и может переноситься. */
+#status-msg {
+  margin-left: auto;
+  min-width: 0;
+  white-space: normal;
 }
 
 /* ----------------------------------------------------------------- оверлей */
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(8, 10, 14, 0.7);
+  background: var(--overlay-bg);
   display: grid;
   place-items: center;
   backdrop-filter: blur(2px);
@@ -759,7 +869,7 @@ body {
 .progress {
   height: 8px;
   border-radius: 999px;
-  background: #262c3a;
+  background: var(--progress-track);
   overflow: hidden;
 }
 .progress-bar {
@@ -769,9 +879,26 @@ body {
   transition: width 0.15s linear;
 }
 
-@media (max-width: 1000px) {
+/* Узкое окно (половина экрана, планшет): две колонки, транспорт — во всю
+   ширину. Раньше здесь включалась одна колонка: при невысоком окне ряды
+   сетки сжимались ниже содержимого, и панели наезжали друг на друга —
+   ручка скорости обрезалась, а ползунок громкости уходил под низ. */
+@media (max-width: 1100px) {
   .controls {
-    grid-template-columns: 1fr;
-    overflow: auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-content: start;
+    grid-auto-rows: max-content;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .transport-panel {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Совсем узко — в одну колонку, но с прокруткой и без наложений. */
+@media (max-width: 720px) {
+  .controls {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
