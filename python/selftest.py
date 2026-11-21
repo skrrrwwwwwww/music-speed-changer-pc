@@ -460,6 +460,51 @@ def test_engine_silent() -> None:
     os.unlink(path)
 
 
+def test_play_restarts_after_end() -> None:
+    """После конца трека Play запускает его заново, а не с последних мс."""
+    from msc.engine import Engine
+
+    sr = 22050
+    path = os.path.join(tempfile.gettempdir(), "msc-restart.wav")
+    import soundfile as sf
+
+    sf.write(path, tone(330.0, 1.0, sr), sr)
+    eng = Engine(silent=True, rate=sr, channels=1)
+    eng.load(path)
+    eng.play()
+
+    deadline = time.time() + 8
+    st = eng.state()
+    while time.time() < deadline and not (st["ended"] and not st["playing"]):
+        time.sleep(0.05)
+        st = eng.state()
+    check("Конец трека: воспроизведение остановилось", st["ended"] and not st["playing"], f"pos={st['position']:.2f}")
+    check("Конец трека: playhead у конца", st["position"] > 0.9, f"pos={st['position']:.2f}")
+
+    eng.play()
+    time.sleep(0.2)
+    st = eng.state()
+    check("Play после конца: играет сначала", st["playing"] and st["position"] < 0.5, f"pos={st['position']:.2f}")
+    check("Play после конца: флаг ended снят", not st["ended"])
+
+    # Дослушиваем ещё раз: ручной seek после конца должен остаться в силе.
+    deadline = time.time() + 8
+    while time.time() < deadline and not (st["ended"] and not st["playing"]):
+        time.sleep(0.05)
+        st = eng.state()
+    eng.seek(0.4)
+    eng.play()
+    time.sleep(0.15)
+    st = eng.state()
+    check(
+        "Play после seek: продолжает с выбранного места",
+        st["playing"] and st["position"] >= 0.4,
+        f"pos={st['position']:.2f}",
+    )
+    eng.close()
+    os.unlink(path)
+
+
 def test_loop_and_repeat() -> None:
     """Петля A–B: позиция не выходит за границы и не застревает."""
     from msc.engine import Engine
@@ -698,6 +743,7 @@ def main() -> int:
     test_output_device_pick()
     test_output_stream_uses_chosen_device()
     test_engine_silent()
+    test_play_restarts_after_end()
     test_loop_and_repeat()
     test_server_protocol()
     test_soundfile_path()

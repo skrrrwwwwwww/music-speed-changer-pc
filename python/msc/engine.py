@@ -276,6 +276,7 @@ class Engine:
         self._queue.clear()
         self._heard = None
         self._eof = False
+        self._ended.clear()
         self._stream = None
         if self.source is not None:
             self.source.close()
@@ -299,6 +300,10 @@ class Engine:
         with self.lock:
             if self._stream is None:
                 return
+            # Трек доиграл до конца: Play запускает его заново, а не с
+            # последних миллисекунд (там уже ничего не слышно).
+            if self._ended.is_set():
+                self._pos_override = 0.0
             if self._pos_override is not None:
                 self._seek_locked(self._pos_override)
                 self._pos_override = None
@@ -371,6 +376,9 @@ class Engine:
         self._stream_pos = seconds
         self._queue.clear()
         self._eof = False
+        # Пользователь сам выбрал позицию — «трек закончился» больше не
+        # действует, Play продолжит отсюда, а не с начала.
+        self._ended.clear()
         self._heard = (seconds, self.speed)
         self._heard_at = time.monotonic()
 
