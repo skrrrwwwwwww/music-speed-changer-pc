@@ -141,9 +141,18 @@
             <button id="btn-loop-mark-b" class="btn tiny">Отметить B</button>
             <button id="btn-loop-clear" class="btn tiny ghost">Сбросить</button>
           </div>
-          <div class="volume-row">
+          <div class="volume-row" title="Громкость: колесо мыши — шаг 5%, Shift + колесо — 1%">
             <span class="slider-cap">🔈</span>
-            <input id="volume" class="slider" type="range" min="0" max="1.4" step="0.01" value="0.9" />
+            <input
+              id="volume"
+              class="slider"
+              type="range"
+              min="0"
+              max="1.4"
+              step="0.01"
+              value="0.9"
+              aria-label="Громкость"
+            />
             <span id="volume-value" class="slider-cap">90%</span>
           </div>
           <label class="switch">

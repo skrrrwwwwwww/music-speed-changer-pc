@@ -470,6 +470,13 @@ body {
   min-width: 30px;
   font-variant-numeric: tabular-nums;
 }
+
+/* Подпись громкости не должна менять ширину на 90% → 140%,
+   иначе ползунок дёргается под колесом мыши. */
+.volume-row #volume-value {
+  min-width: 38px;
+  text-align: right;
+}
 .slider {
   appearance: none;
   flex: 1;

@@ -854,6 +854,22 @@ function setPitch(v, { silentUi = false } = {}) {
   if (!silentUi) send('set', { param: 'pitch', value: val });
 }
 
+const VOLUME_MIN = 0;
+const VOLUME_MAX = 1.4;
+
+/**
+ * Громкость: ползунок, подпись и движок всегда меняются вместе.
+ * Возвращает итоговое значение (с округлением до процента).
+ */
+function setVolume(v, { silent = false } = {}) {
+  const val = Math.min(VOLUME_MAX, Math.max(VOLUME_MIN, Math.round(v * 100) / 100));
+  state.volume = val;
+  el.volume.value = String(val);
+  el['volume-value'].textContent = `${Math.round(val * 100)}%`;
+  if (!silent) send('set', { param: 'volume', value: val });
+  return val;
+}
+
 /** Панель статуса: устройство вывода, частота, наличие ffmpeg. */
 function showEngineInfo(info) {
   if (!info) return;
@@ -1450,13 +1466,22 @@ function setupUi() {
     if (chip) setSpeed(Number(chip.dataset.speed));
   });
 
-  el.volume.addEventListener('input', (e) => {
-    const v = Number(e.target.value);
-    el['volume-value'].textContent = `${Math.round(v * 100)}%`;
-    send('set', { param: 'volume', value: v });
-  });
-  el.volume.value = String(state.volume);
-  el['volume-value'].textContent = `${Math.round(state.volume * 100)}%`;
+  el.volume.addEventListener('input', (e) => setVolume(Number(e.target.value)));
+
+  // Колесо мыши над ползунком (и подписью/иконкой рядом) — громкость.
+  // Shift делает шаг мельче, чтобы можно было подстроить точно.
+  el.volume.closest('.volume-row').addEventListener(
+    'wheel',
+    (e) => {
+      if (!e.deltaY) return;
+      e.preventDefault();
+      const step = e.shiftKey ? 0.01 : 0.05;
+      setVolume(Number(el.volume.value) + (e.deltaY > 0 ? -step : step));
+    },
+    { passive: false },
+  );
+
+  setVolume(state.volume, { silent: true });
 
   el['loop-toggle'].addEventListener('change', (e) => {
     if (e.target.checked && state.loop.end <= state.loop.start) {
