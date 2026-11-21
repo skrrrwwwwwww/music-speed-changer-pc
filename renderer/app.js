@@ -50,6 +50,210 @@ function cacheDom() {
   });
 }
 
+/* ---------------------------------------------------- выпадающие списки */
+/**
+ * Родной <select> на Linux рисует всплывающий список системными цветами:
+ * светлый фон и синяя подсветка, которые не подчиняются ни теме
+ * приложения, ни палитре рабочего стола. Поэтому показываем свой список
+ * на CSS-переменных, а сам <select> остаётся хранилищем значения.
+ */
+const customSelects = [];
+
+function setupCustomSelect(select) {
+  if (!select || select.dataset.customSelect) return null;
+  select.dataset.customSelect = '1';
+
+  const wrap = document.createElement('span');
+  wrap.className = 'cselect';
+  select.parentNode.insertBefore(wrap, select);
+  wrap.appendChild(select);
+  select.classList.add('cselect-native');
+  select.tabIndex = -1;
+  select.setAttribute('aria-hidden', 'true');
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'cselect-btn';
+  btn.setAttribute('aria-haspopup', 'listbox');
+  btn.setAttribute('aria-expanded', 'false');
+  const btnLabel = document.createElement('span');
+  btnLabel.className = 'cselect-label';
+  const arrow = document.createElement('span');
+  arrow.className = 'cselect-arrow';
+  arrow.textContent = '▾';
+  arrow.setAttribute('aria-hidden', 'true');
+  btn.append(btnLabel, arrow);
+  wrap.appendChild(btn);
+
+  const menu = document.createElement('div');
+  menu.className = 'cselect-menu hidden';
+  menu.setAttribute('role', 'listbox');
+  document.body.appendChild(menu);
+
+  const api = { select, wrap, btn, menu, open: false };
+  customSelects.push(api);
+
+  const render = () => {
+    const current = select.selectedOptions[0] || select.options[0];
+    btnLabel.textContent = current ? current.textContent : '';
+    btn.disabled = select.disabled;
+    btn.title = select.title || wrap.parentElement?.title || '';
+    menu.replaceChildren();
+    for (const opt of select.options) {
+      const active = opt.selected || opt.value === select.value;
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'cselect-item';
+      item.dataset.value = opt.value;
+      item.setAttribute('role', 'option');
+      item.setAttribute('aria-selected', String(active));
+      item.classList.toggle('is-active', active);
+
+      const text = document.createElement('span');
+      text.className = 'cselect-item-text';
+      text.textContent = opt.textContent;
+      const check = document.createElement('span');
+      check.className = 'cselect-check';
+      check.textContent = '✓';
+      check.setAttribute('aria-hidden', 'true');
+      item.append(text, check);
+
+      item.addEventListener('click', () => {
+        closeCustomSelect(api);
+        if (select.value !== opt.value) {
+          select.value = opt.value;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        btn.focus();
+      });
+      menu.appendChild(item);
+    }
+  };
+
+  // Программное `select.value = ...` не шлёт событий — обновляем подпись сами.
+  const valueDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+  Object.defineProperty(select, 'value', {
+    configurable: true,
+    get() {
+      return valueDesc.get.call(this);
+    },
+    set(v) {
+      valueDesc.set.call(this, v);
+      render();
+    },
+  });
+
+  // Устройства пересобираются через innerHTML, disabled/title меняются кодом.
+  new MutationObserver(() => render()).observe(select, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['disabled', 'title'],
+  });
+
+  api.render = render;
+  api.close = () => closeCustomSelect(api);
+  api.onDocPointerDown = (e) => {
+    if (api.wrap.contains(e.target) || api.menu.contains(e.target)) return;
+    closeCustomSelect(api);
+  };
+  api.onWindowChange = () => closeCustomSelect(api);
+
+  btn.addEventListener('click', () => {
+    if (api.open) closeCustomSelect(api);
+    else openCustomSelect(api);
+  });
+  btn.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      openCustomSelect(api, e.key === 'ArrowUp' ? -1 : 1);
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openCustomSelect(api);
+    } else if (e.key === 'Escape') {
+      closeCustomSelect(api);
+    }
+  });
+
+  menu.addEventListener('keydown', (e) => {
+    const items = [...menu.querySelectorAll('.cselect-item')];
+    if (!items.length) return;
+    const i = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      items[Math.min(items.length - 1, i + 1)]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      items[Math.max(0, i - 1)]?.focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      items[0].focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      items[items.length - 1].focus();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeCustomSelect(api);
+      btn.focus();
+    } else if (e.key === 'Tab') {
+      closeCustomSelect(api);
+    }
+  });
+
+  render();
+  return api;
+}
+
+function openCustomSelect(api, direction = 0) {
+  if (!api || api.open || api.select.disabled) return;
+  for (const other of customSelects) if (other !== api) closeCustomSelect(other);
+  api.render();
+  api.menu.classList.remove('hidden');
+  api.open = true;
+  api.btn.setAttribute('aria-expanded', 'true');
+
+  const r = api.btn.getBoundingClientRect();
+  const margin = 8;
+  // Длинные имена звуковых карт показываем целиком хотя бы в меню.
+  const width = Math.max(120, Math.min(Math.max(r.width, 180), window.innerWidth - margin * 2, 360));
+  api.menu.style.width = `${width}px`;
+  const height = api.menu.offsetHeight;
+  const left = Math.max(margin, Math.min(r.left, window.innerWidth - width - margin));
+  // В нижней панели места снизу нет — раскрываем вверх, а если не влезло,
+  // то вниз.
+  let top = r.top - height - 6;
+  if (top < margin) top = r.bottom + 6;
+  api.menu.style.left = `${Math.round(left)}px`;
+  api.menu.style.top = `${Math.round(top)}px`;
+
+  const items = [...api.menu.querySelectorAll('.cselect-item')];
+  let idx = items.findIndex((item) => item.classList.contains('is-active'));
+  if (idx < 0) idx = 0;
+  if (direction < 0) idx = Math.max(0, idx - 1);
+  else if (direction > 0) idx = Math.min(items.length - 1, idx + 1);
+  items[idx]?.focus();
+
+  document.addEventListener('pointerdown', api.onDocPointerDown, true);
+  window.addEventListener('resize', api.onWindowChange);
+  window.addEventListener('blur', api.onWindowChange);
+  window.addEventListener('scroll', api.onWindowChange, true);
+}
+
+function closeCustomSelect(api) {
+  if (!api || !api.open) return;
+  api.open = false;
+  api.menu.classList.add('hidden');
+  api.btn.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('pointerdown', api.onDocPointerDown, true);
+  window.removeEventListener('resize', api.onWindowChange);
+  window.removeEventListener('blur', api.onWindowChange);
+  window.removeEventListener('scroll', api.onWindowChange, true);
+}
+
+function setupCustomSelects() {
+  for (const select of document.querySelectorAll('select.select')) setupCustomSelect(select);
+}
+
 /* ------------------------------------------------------------------ utils */
 function fmtTime(sec) {
   if (!isFinite(sec) || sec < 0) sec = 0;
@@ -1667,6 +1871,7 @@ function setupUi() {
 /* ------------------------------------------------------------------ init */
 function init() {
   cacheDom();
+  setupCustomSelects();
   refreshPalette();
   setupWave();
   setupKnob();

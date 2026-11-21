@@ -790,6 +790,111 @@ body {
   cursor: default;
 }
 
+/* Свой выпадающий список: родной <select> на Linux рисует меню
+   системными цветами (синяя подсветка, светлый фон) и игнорирует тему. */
+.cselect {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+.cselect-native {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.cselect-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 190px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.cselect-btn:hover:not(:disabled) {
+  background: var(--btn-hover);
+  border-color: var(--btn-hover-line);
+}
+.cselect-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.cselect-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.cselect-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cselect-arrow {
+  flex: none;
+  font-size: 9px;
+  color: var(--muted);
+}
+.cselect-menu {
+  position: fixed;
+  z-index: 1000;
+  max-height: 280px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+}
+.cselect-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.cselect-item-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cselect-item:hover,
+.cselect-item:focus-visible {
+  background: var(--btn-hover);
+  outline: none;
+}
+.cselect-item.is-active {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+.cselect-check {
+  flex: none;
+  opacity: 0;
+}
+.cselect-item.is-active .cselect-check {
+  opacity: 1;
+}
+
 /* Переключатель в статусной строке. */
 .switch {
   display: flex;
